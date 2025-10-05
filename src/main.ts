@@ -53,6 +53,10 @@ if (args['sandbox'] &&
 	app.commandLine.appendSwitch('disable-gpu-sandbox');
 }
 
+// Disable web security to allow WebAiChat feature to fetch any URL without CORS
+app.commandLine.appendSwitch('disable-web-security');
+app.commandLine.appendSwitch('disable-features', 'OutOfBlinkCors');
+
 // Set userData path before app 'ready' event
 const userDataPath = getUserDataPath(args, product.nameShort ?? 'code-oss-dev');
 if (process.platform === 'win32') {

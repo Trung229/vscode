@@ -421,5 +421,9 @@ import './contrib/dropOrPasteInto/browser/dropOrPasteInto.contribution.js';
 // Edit Telemetry
 import './contrib/editTelemetry/browser/editTelemetry.contribution.js';
 
+// Web AI Chat
+import './contrib/webAIChat/browser/webAiChat.contribution.js';
 
+// Hello World
+import './contrib/helloworld/browser/helloWorld.contribution.js';
 //#endregion

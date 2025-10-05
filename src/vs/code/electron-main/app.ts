@@ -341,6 +341,45 @@ export class CodeApplication extends Disposable {
 
 		//#endregion
 
+		//#region Allow CORS for WebAiChat feature
+
+		// Disable web security for all sessions to bypass CORS
+		// This is needed for the WebAiChat feature to fetch any website content
+		session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
+			console.log('[CORS Bypass] onBeforeSendHeaders:', details.url, details.method);
+			callback({ cancel: false, requestHeaders: details.requestHeaders });
+		});
+
+		// Handle preflight OPTIONS requests
+		session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
+			if (details.method === 'OPTIONS') {
+				console.log('[CORS Bypass] Intercepting OPTIONS request:', details.url);
+				callback({ cancel: false });
+			} else {
+				callback({ cancel: false });
+			}
+		});
+
+		// Allow WebAiChat to fetch any URL without CORS restrictions
+		session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+			console.log('[CORS Bypass] onHeadersReceived:', details.url, 'status:', details.statusCode);
+
+			// Allow all external URLs to be fetched without CORS restrictions
+			const responseHeaders = details.responseHeaders ?? Object.create(null);
+
+			// Add CORS headers to all responses
+			responseHeaders['Access-Control-Allow-Origin'] = ['*'];
+			responseHeaders['Access-Control-Allow-Methods'] = ['GET, POST, PUT, DELETE, OPTIONS, PATCH'];
+			responseHeaders['Access-Control-Allow-Headers'] = ['*'];
+			responseHeaders['Access-Control-Allow-Credentials'] = ['true'];
+			responseHeaders['Access-Control-Max-Age'] = ['86400'];
+
+			console.log('[CORS Bypass] Modified headers for:', details.url);
+			return callback({ cancel: false, responseHeaders });
+		});
+
+		//#endregion
+
 		//#region Code Cache
 
 		type SessionWithCodeCachePathSupport = Session & {

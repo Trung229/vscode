@@ -12,7 +12,9 @@
   "devDependencies": {
     "@parcel/watcher": "parcel-bundler/watcher#1ca032aa8339260a8a3bcf825c3a1a71e3e43542",
     "esbuild": "0.25.0",
-    "vscode-grammar-updater": "^1.1.0"
+    "vscode-grammar-updater": "^1.1.0",
+    "@google/generative-ai": "^0.24.1",
+    "axios": "^1.12.2"
   },
   "overrides": {
     "node-gyp-build": "4.8.1"

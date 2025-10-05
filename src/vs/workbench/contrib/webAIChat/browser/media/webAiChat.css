@@ -1,0 +1,17 @@
+.web-ai-chat-container {
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	padding: 10px;
+}
+
+.web-ai-chat-container h2 {
+	margin: 0 0 10px 0;
+	font-size: 16px;
+	font-weight: 600;
+}
+
+.web-ai-chat-container p {
+	margin: 0;
+	color: var(--vscode-descriptionForeground);
+}
