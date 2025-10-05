@@ -1,0 +1,37 @@
+{
+  "name": "ai-chat",
+  "displayName": "Web AI Chat",
+  "description": "Chat with AI about any website content",
+  "version": "1.0.0",
+  "publisher": "vscode",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.0.0"
+  },
+  "main": "./extension.js",
+  "activationEvents": [
+    "onCommand:aichat.startSession"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "aichat.startSession",
+        "title": "Web AI Chat: Start New Session"
+      }
+    ],
+    "configuration": {
+      "title": "Web AI Chat",
+      "properties": {
+        "webAiChat.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Google Gemini API Key for AI responses"
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "@google/generative-ai": "^0.21.0"
+  }
+}
