@@ -2,7 +2,7 @@
 
 A VS Code built-in extension that allows you to chat with AI about any website content using Google Gemini API.
 
-![Extension Demo](https://via.placeholder.com/800x450?text=Web+AI+Chat+Demo)
+<img width='500' height='500' src='https://malworld.blob.core.windows.net/web-chat-ai/sc_os_1.png/>
 
 ## ✨ Features
 
