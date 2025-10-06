@@ -169,18 +169,6 @@ export class WebAiChatView extends ViewPane {
 			const htmlContent = buffer.toString();
 			console.log('[WebAiChat] Content fetched, length:', htmlContent.length);
 
-			// Check if embeddable
-			const xFrameOptions = (response.res.headers['x-frame-options'] || '').toString().toUpperCase();
-			const csp = (response.res.headers['content-security-policy'] || '').toString();
-
-			let isEmbeddable = true;
-			if (xFrameOptions === 'DENY' || xFrameOptions === 'SAMEORIGIN') {
-				isEmbeddable = false;
-			}
-			if (csp.includes('frame-ancestors \'none\'') || csp.includes('frame-ancestors \'self\'')) {
-				isEmbeddable = false;
-			}
-
 			// Clean content for AI (remove HTML tags)
 			this.siteContent = htmlContent
 				.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
@@ -189,46 +177,149 @@ export class WebAiChatView extends ViewPane {
 				.replace(/\s+/g, ' ')
 				.trim();
 
-			if (!isEmbeddable) {
-				this.notificationService.notify({
-					severity: Severity.Warning,
-					message: 'Nội dung web đã được tải cho AI, nhưng không thể hiển thị do chính sách bảo mật của trang web.'
-				});
+			this.notificationService.notify({
+				severity: Severity.Info,
+				message: 'Website content fetched successfully!'
+			});
 
-				// Send message to display security warning in iframe instead of content
-				this.webview?.postMessage({
-					command: 'displaySecurityWarning',
-					url: url,
-					message: 'Trang web này không thể hiển thị do chính sách bảo mật (X-Frame-Options hoặc CSP). Tuy nhiên, nội dung đã được tải và bạn có thể hỏi AI về nội dung trang web.'
-				});
-			} else {
-				this.notificationService.notify({
-					severity: Severity.Info,
-					message: 'Website content fetched successfully!'
-				});
+			// Inject anti-iframe prevention script and base tag
+			let modifiedHtml = htmlContent;
 
-				// Inject <base> tag to help iframe resolve relative URLs
-				let modifiedHtml = htmlContent;
-				const baseTag = `<base href="${url}">`;
-
-				// Try to inject after <head> tag
-				if (modifiedHtml.match(/<head[^>]*>/i)) {
-					modifiedHtml = modifiedHtml.replace(/(<head[^>]*>)/i, `$1\n${baseTag}`);
-				} else if (modifiedHtml.match(/<html[^>]*>/i)) {
-					// If no <head>, inject after <html>
-					modifiedHtml = modifiedHtml.replace(/(<html[^>]*>)/i, `$1\n<head>${baseTag}</head>`);
-				} else {
-					// If no structure, wrap it
-					modifiedHtml = `<!DOCTYPE html><html><head>${baseTag}</head><body>${modifiedHtml}</body></html>`;
+			// Script to fix sandbox restrictions and prevent errors
+			const sandboxFixScript = `<script>
+		(function() {
+			// Suppress ALL console errors and warnings to keep console clean
+			var originalError = console.error;
+			var originalWarn = console.warn;
+			console.error = function() {
+				var args = Array.prototype.slice.call(arguments);
+				var firstArg = args[0] ? String(args[0]) : '';
+				// Suppress sandbox, CORS, and other common iframe errors
+				if (firstArg.includes('sandboxed') ||
+					firstArg.includes('SecurityError') ||
+					firstArg.includes('CORS') ||
+					firstArg.includes('ERR_BLOCKED') ||
+					firstArg.includes('NotSamesite') ||
+					firstArg.includes('Forbidden')) {
+					return;
 				}
+				originalError.apply(console, arguments);
+			};
+			console.warn = function() {
+				var args = Array.prototype.slice.call(arguments);
+				var firstArg = args[0] ? String(args[0]) : '';
+				if (firstArg.includes('sandboxed') || firstArg.includes('sandbox')) {
+					return;
+				}
+				originalWarn.apply(console, arguments);
+			};
 
-				// Send HTML content to webview for display in iframe
-				this.webview?.postMessage({
-					command: 'displayWebsite',
-					htmlContent: modifiedHtml,
-					url: url
+			// Override frame-busting techniques
+			try {
+				Object.defineProperty(window, 'top', {
+					configurable: false,
+					get: function() { return window.self; }
 				});
+				Object.defineProperty(window, 'parent', {
+					configurable: false,
+					get: function() { return window.self; }
+				});
+			} catch(e) {}
+
+			// Prevent all types of navigation attempts
+			var blockNavigation = function() { return false; };
+			window.onbeforeunload = blockNavigation;
+
+			// Wrap ALL error-prone methods
+			var safeWrap = function(obj, method, handler) {
+				if (!obj || !obj[method]) return;
+				var original = obj[method];
+				obj[method] = function() {
+					try {
+						return handler ? handler.apply(this, arguments) : original.apply(this, arguments);
+					} catch(e) {
+						return undefined;
+					}
+				};
+			};
+
+			// Safe addEventListener
+			safeWrap(EventTarget.prototype, 'addEventListener');
+
+			// Safe document.write
+			safeWrap(document, 'write', function(content) {
+				if (content && (String(content).includes('top.location') || String(content).includes('parent.location'))) {
+					return;
+				}
+				return document.write.call(document, content);
+			});
+
+			// Global error handler - suppress ALL errors
+			window.addEventListener('error', function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				return true;
+			}, true);
+
+			// Unhandled promise rejection handler
+			window.addEventListener('unhandledrejection', function(e) {
+				e.preventDefault();
+				return true;
+			});
+
+			// Remove all blocking elements periodically
+			var removeBlockers = function() {
+				try {
+					// Remove high z-index transparent overlays
+					var overlays = document.querySelectorAll('div, span, section');
+					overlays.forEach(function(el) {
+						var style = window.getComputedStyle(el);
+						var zIndex = parseInt(style.zIndex);
+						var position = style.position;
+						if ((position === 'fixed' || position === 'absolute') && zIndex > 999) {
+							var opacity = parseFloat(style.opacity);
+							var pointerEvents = style.pointerEvents;
+							if (opacity === 0 || pointerEvents === 'none' ||
+								style.background === 'transparent' ||
+								style.backgroundColor === 'transparent' ||
+								style.backgroundColor === 'rgba(0, 0, 0, 0)') {
+								el.style.display = 'none';
+							}
+						}
+					});
+				} catch(e) {}
+			};
+
+			// Run blocker removal on load and periodically
+			window.addEventListener('load', function() {
+				removeBlockers();
+				setInterval(removeBlockers, 2000);
+			});
+			setTimeout(removeBlockers, 1000);
+		})();
+	</script>`;
+
+			const baseTag = `<base href="${url}">`;
+
+			// Try to inject at the very beginning of <head> (before any other scripts)
+			if (modifiedHtml.match(/<head[^>]*>/i)) {
+				modifiedHtml = modifiedHtml.replace(/(<head[^>]*>)/i, `$1\n${baseTag}\n${sandboxFixScript}`);
+			} else if (modifiedHtml.match(/<html[^>]*>/i)) {
+				// If no <head>, inject after <html>
+				modifiedHtml = modifiedHtml.replace(/(<html[^>]*>)/i, `$1\n<head>${baseTag}${sandboxFixScript}</head>`);
+			} else {
+				// If no structure, wrap it
+				modifiedHtml = `<!DOCTYPE html><html><head>${baseTag}${sandboxFixScript}</head><body>${modifiedHtml}</body></html>`;
 			}
+
+			// Send HTML content to webview for display in iframe
+			// Note: X-Frame-Options and CSP frame-ancestors are removed at Electron level
+			// so all websites can be embedded in iframe
+			this.webview?.postMessage({
+				command: 'displayWebsite',
+				htmlContent: modifiedHtml,
+				url: url
+			});
 
 		} catch (error: any) {
 			if (error.name === 'Canceled') {
@@ -432,7 +523,7 @@ User Question: "${question}"`;
 						<div class="loader" id="loader">Loading...</div>
 						<button id="loadBtn">Load</button>
 					</div>
-					<iframe id="websiteFrame" src="" sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"></iframe>
+					<iframe id="websiteFrame" src="" sandbox="allow-scripts allow-forms"></iframe>
 				</div>
 				<div class="resizer" id="resizer"></div>
 				<div class="chat-container">
@@ -541,57 +632,6 @@ User Question: "${question}"`;
 						if (message.htmlContent) {
 							websiteFrame.srcdoc = message.htmlContent;
 						}
-						break;
-					case 'displaySecurityWarning':
-						// Display security warning message in iframe
-						const warningHtml = \`<!DOCTYPE html>
-						<html>
-						<head>
-							<meta charset="UTF-8">
-							<style>
-								body {
-									font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-									display: flex;
-									align-items: center;
-									justify-content: center;
-									height: 100vh;
-									margin: 0;
-									background-color: #1e1e1e;
-									color: #cccccc;
-								}
-								.warning-container {
-									text-align: center;
-									padding: 40px;
-									max-width: 500px;
-								}
-								.warning-icon {
-									font-size: 64px;
-									margin-bottom: 20px;
-								}
-								h2 {
-									color: #f48771;
-									margin-bottom: 20px;
-								}
-								p {
-									line-height: 1.6;
-									margin-bottom: 15px;
-								}
-								.url {
-									color: #4ec9b0;
-									word-break: break-all;
-								}
-							</style>
-						</head>
-						<body>
-							<div class="warning-container">
-								<div class="warning-icon">🔒</div>
-								<h2>Không thể hiển thị trang web</h2>
-								<p class="url">\${message.url}</p>
-								<p>\${message.message}</p>
-							</div>
-						</body>
-						</html>\`;
-						websiteFrame.srcdoc = warningHtml;
 						break;
 					case 'loadComplete':
 						setLoadingState(false);
