@@ -346,14 +346,12 @@ export class CodeApplication extends Disposable {
 		// Disable web security for all sessions to bypass CORS
 		// This is needed for the WebAiChat feature to fetch any website content
 		session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
-			console.log('[CORS Bypass] onBeforeSendHeaders:', details.url, details.method);
 			callback({ cancel: false, requestHeaders: details.requestHeaders });
 		});
 
 		// Handle preflight OPTIONS requests
 		session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
 			if (details.method === 'OPTIONS') {
-				console.log('[CORS Bypass] Intercepting OPTIONS request:', details.url);
 				callback({ cancel: false });
 			} else {
 				callback({ cancel: false });
@@ -363,8 +361,6 @@ export class CodeApplication extends Disposable {
 		// Allow WebAiChat to fetch any URL without CORS restrictions
 		// Also remove X-Frame-Options and CSP frame-ancestors to allow iframe embedding
 		session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-			console.log('[CORS Bypass] onHeadersReceived:', details.url, 'status:', details.statusCode);
-
 			// Allow all external URLs to be fetched without CORS restrictions
 			const responseHeaders = details.responseHeaders ?? Object.create(null);
 
@@ -404,7 +400,6 @@ export class CodeApplication extends Disposable {
 				}
 			}
 
-			console.log('[CORS Bypass] Modified headers for:', details.url);
 			return callback({ cancel: false, responseHeaders });
 		});
 
