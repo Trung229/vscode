@@ -181,18 +181,6 @@ export class WebAiChatView extends ViewPane {
 				isEmbeddable = false;
 			}
 
-			if (!isEmbeddable) {
-				this.notificationService.notify({
-					severity: Severity.Warning,
-					message: 'Nội dung web đã được tải cho AI, nhưng không thể hiển thị do chính sách bảo mật của trang web.'
-				});
-			} else {
-				this.notificationService.notify({
-					severity: Severity.Info,
-					message: 'Website content fetched successfully!'
-				});
-			}
-
 			// Clean content for AI (remove HTML tags)
 			this.siteContent = htmlContent
 				.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
@@ -201,27 +189,46 @@ export class WebAiChatView extends ViewPane {
 				.replace(/\s+/g, ' ')
 				.trim();
 
-			// Inject <base> tag to help iframe resolve relative URLs
-			let modifiedHtml = htmlContent;
-			const baseTag = `<base href="${url}">`;
+			if (!isEmbeddable) {
+				this.notificationService.notify({
+					severity: Severity.Warning,
+					message: 'Nội dung web đã được tải cho AI, nhưng không thể hiển thị do chính sách bảo mật của trang web.'
+				});
 
-			// Try to inject after <head> tag
-			if (modifiedHtml.match(/<head[^>]*>/i)) {
-				modifiedHtml = modifiedHtml.replace(/(<head[^>]*>)/i, `$1\n${baseTag}`);
-			} else if (modifiedHtml.match(/<html[^>]*>/i)) {
-				// If no <head>, inject after <html>
-				modifiedHtml = modifiedHtml.replace(/(<html[^>]*>)/i, `$1\n<head>${baseTag}</head>`);
+				// Send message to display security warning in iframe instead of content
+				this.webview?.postMessage({
+					command: 'displaySecurityWarning',
+					url: url,
+					message: 'Trang web này không thể hiển thị do chính sách bảo mật (X-Frame-Options hoặc CSP). Tuy nhiên, nội dung đã được tải và bạn có thể hỏi AI về nội dung trang web.'
+				});
 			} else {
-				// If no structure, wrap it
-				modifiedHtml = `<!DOCTYPE html><html><head>${baseTag}</head><body>${modifiedHtml}</body></html>`;
-			}
+				this.notificationService.notify({
+					severity: Severity.Info,
+					message: 'Website content fetched successfully!'
+				});
 
-			// Send HTML content to webview for display in iframe
-			this.webview?.postMessage({
-				command: 'displayWebsite',
-				htmlContent: modifiedHtml,
-				url: url
-			});
+				// Inject <base> tag to help iframe resolve relative URLs
+				let modifiedHtml = htmlContent;
+				const baseTag = `<base href="${url}">`;
+
+				// Try to inject after <head> tag
+				if (modifiedHtml.match(/<head[^>]*>/i)) {
+					modifiedHtml = modifiedHtml.replace(/(<head[^>]*>)/i, `$1\n${baseTag}`);
+				} else if (modifiedHtml.match(/<html[^>]*>/i)) {
+					// If no <head>, inject after <html>
+					modifiedHtml = modifiedHtml.replace(/(<html[^>]*>)/i, `$1\n<head>${baseTag}</head>`);
+				} else {
+					// If no structure, wrap it
+					modifiedHtml = `<!DOCTYPE html><html><head>${baseTag}</head><body>${modifiedHtml}</body></html>`;
+				}
+
+				// Send HTML content to webview for display in iframe
+				this.webview?.postMessage({
+					command: 'displayWebsite',
+					htmlContent: modifiedHtml,
+					url: url
+				});
+			}
 
 		} catch (error: any) {
 			if (error.name === 'Canceled') {
@@ -525,30 +532,81 @@ User Question: "${question}"`;
 					}
 				});
 
-				// --- Listener nhận tin nhắn từ Backend ---
-				window.addEventListener('message', event => {
-					const message = event.data;
-					switch (message.command) {
-						case 'displayWebsite':
-							// Display website in iframe using srcdoc
-							if (message.htmlContent) {
-								websiteFrame.srcdoc = message.htmlContent;
-							}
-							break;
-						case 'loadComplete':
-							setLoadingState(false);
-							break;
-						case 'llmResponse':
-							const loadingIndicator = document.getElementById('loading-indicator');
-							if (loadingIndicator) {
-								loadingIndicator.remove();
-							}
-							chatMessages.innerHTML += \`<div><strong>AI:</strong> \${message.text}</div>\`;
-							chatMessages.scrollTop = chatMessages.scrollHeight;
-							setChatInputEnabled(true);
-							break;
-					}
-				});
+			// --- Listener nhận tin nhắn từ Backend ---
+			window.addEventListener('message', event => {
+				const message = event.data;
+				switch (message.command) {
+					case 'displayWebsite':
+						// Display website in iframe using srcdoc
+						if (message.htmlContent) {
+							websiteFrame.srcdoc = message.htmlContent;
+						}
+						break;
+					case 'displaySecurityWarning':
+						// Display security warning message in iframe
+						const warningHtml = \`<!DOCTYPE html>
+						<html>
+						<head>
+							<meta charset="UTF-8">
+							<style>
+								body {
+									font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+									display: flex;
+									align-items: center;
+									justify-content: center;
+									height: 100vh;
+									margin: 0;
+									background-color: #1e1e1e;
+									color: #cccccc;
+								}
+								.warning-container {
+									text-align: center;
+									padding: 40px;
+									max-width: 500px;
+								}
+								.warning-icon {
+									font-size: 64px;
+									margin-bottom: 20px;
+								}
+								h2 {
+									color: #f48771;
+									margin-bottom: 20px;
+								}
+								p {
+									line-height: 1.6;
+									margin-bottom: 15px;
+								}
+								.url {
+									color: #4ec9b0;
+									word-break: break-all;
+								}
+							</style>
+						</head>
+						<body>
+							<div class="warning-container">
+								<div class="warning-icon">🔒</div>
+								<h2>Không thể hiển thị trang web</h2>
+								<p class="url">\${message.url}</p>
+								<p>\${message.message}</p>
+							</div>
+						</body>
+						</html>\`;
+						websiteFrame.srcdoc = warningHtml;
+						break;
+					case 'loadComplete':
+						setLoadingState(false);
+						break;
+					case 'llmResponse':
+						const loadingIndicator = document.getElementById('loading-indicator');
+						if (loadingIndicator) {
+							loadingIndicator.remove();
+						}
+						chatMessages.innerHTML += \`<div><strong>AI:</strong> \${message.text}</div>\`;
+						chatMessages.scrollTop = chatMessages.scrollHeight;
+						setChatInputEnabled(true);
+						break;
+				}
+			});
 			</script>
 		</body>
 		</html>`;
