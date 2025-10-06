@@ -359,25 +359,18 @@ export class CodeApplication extends Disposable {
 		});
 
 		// Allow WebAiChat to fetch any URL without CORS restrictions
-		// Also remove X-Frame-Options and CSP frame-ancestors to allow iframe embedding
 		session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-			// Allow all external URLs to be fetched without CORS restrictions
 			const responseHeaders = details.responseHeaders ?? Object.create(null);
 
-			// Add CORS headers to all responses
 			responseHeaders['Access-Control-Allow-Origin'] = ['*'];
 			responseHeaders['Access-Control-Allow-Methods'] = ['GET, POST, PUT, DELETE, OPTIONS, PATCH'];
 			responseHeaders['Access-Control-Allow-Headers'] = ['*'];
 			responseHeaders['Access-Control-Allow-Credentials'] = ['true'];
 			responseHeaders['Access-Control-Max-Age'] = ['86400'];
 
-			// Remove X-Frame-Options to allow iframe embedding
-			// This enables WebAiChat to display any website in iframe
 			delete responseHeaders['X-Frame-Options'];
 			delete responseHeaders['x-frame-options'];
 
-			// Remove or modify Content-Security-Policy to allow iframe embedding
-			// Remove frame-ancestors directive that blocks iframe embedding
 			const cspKeys = ['Content-Security-Policy', 'content-security-policy'];
 			for (const cspKey of cspKeys) {
 				if (responseHeaders[cspKey]) {
@@ -386,9 +379,7 @@ export class CodeApplication extends Disposable {
 						cspValues = [cspValues];
 					}
 
-					// Remove frame-ancestors directive from CSP
 					const modifiedCsp = cspValues.map((csp: string) => {
-						// Remove frame-ancestors 'none' or frame-ancestors 'self' or any frame-ancestors directive
 						return csp.replace(/frame-ancestors[^;]*(;|$)/gi, '');
 					}).filter((csp: string) => csp.trim().length > 0);
 
